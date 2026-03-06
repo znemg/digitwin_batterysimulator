@@ -1,0 +1,52 @@
+import React from 'react'
+
+/**
+ * Sidebar - Navigation and context filters
+ * 
+ * Props:
+ *   onNavigate: (page: string) => void - called when user clicks nav items
+ *   active: string - current active page ("overview", "netmap", "aisummary", "runsel")
+ * 
+ * Displays different filters depending on active page (e.g., network filters for NetMap)
+ */
+export default function Sidebar({onNavigate, active}){
+  return (
+    <div className="sidebar" id="sidebar">
+      <div className="sb-label">Run Analysis</div>
+      <div className={`sb-item ${active==='overview'?'active':''}`} id="navOverview" onClick={()=>onNavigate('overview')}><span className="sb-icon">◫</span> Overview Dashboard</div>
+      <div className={`sb-item ${active==='netmap'?'active':''}`} id="navNetMap" onClick={()=>onNavigate('netmap')}><span className="sb-icon">⬡</span> Network Map</div>
+      <div className={`sb-item ${active==='aisummary'?'active':''}`} id="navAISummary" onClick={()=>onNavigate('aisummary')}><span className="sb-icon">◈</span> AI Summary</div>
+
+      <div className="sb-divider"></div>
+      <div className="sb-label">Run Tools</div>
+      <div className={`sb-item ${active==='runsel'?'active':''}`} id="navRunSel" onClick={()=>onNavigate('runsel')}><span className="sb-icon">☰</span> Run Selector</div>
+      <div className="sb-item disabled"><span className="sb-icon">＋</span> Create New Run</div>
+
+      <div className={`sb-ctx ${active==='netmap'?'visible':''}`} id="ctxNetMap">
+        <div className="sb-divider"></div>
+        <div className="sb-label">Map Filters</div>
+        <div className="f-section">
+          <div className="f-group">
+            <div className="f-group-label">Traffic Type <span className="help-icon">?<span className="help-tip">Filter edges by traffic category to isolate congestion sources.</span></span></div>
+            <select className="f-select" id="trafficSelect">
+              <option value="all">All Traffic</option>
+              <option value="alerts">Alerts Only</option>
+              <option value="heartbeat">Heartbeat Only</option>
+              <option value="ai">AI Detections Only</option>
+            </select>
+          </div>
+        </div>
+        <div className="sb-divider"></div>
+        <div className="sb-label">Reroutes</div>
+        <details className="reroutes-panel">
+          <summary className="reroutes-header" id="reroutesHdr">Reroute Events</summary>
+          <div className="reroutes-body" id="reroutesBody">
+            <div className="reroute-item"><div className="reroute-dot"></div><span className="reroute-from">S3</span> → <span className="reroute-to">R4</span><span style={{marginLeft:'auto',color:'var(--text-muted)',fontSize:9}}>03:12</span></div>
+            <div className="reroute-item"><div className="reroute-dot"></div><span className="reroute-from">S7</span> → <span className="reroute-to">R3</span><span style={{marginLeft:'auto',color:'var(--text-muted)',fontSize:9}}>07:45</span></div>
+            <div className="reroute-item"><div className="reroute-dot"></div><span className="reroute-from">S11</span> → <span className="reroute-to">R3</span><span style={{marginLeft:'auto',color:'var(--text-muted)',fontSize:9}}>11:22</span></div>
+          </div>
+        </details>
+      </div>
+    </div>
+  )
+}
