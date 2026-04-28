@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import runs, network, ai
 from app.database import init_db
-from app.seed import seed
+from app.seed import seed, seed_simulated
 
 app = FastAPI(
     title="Digital Twin API",
@@ -34,6 +34,7 @@ def on_startup():
     """Create tables and seed mock data on first run."""
     init_db()
     seed()
+    seed_simulated()
 
 
 @app.get("/health")

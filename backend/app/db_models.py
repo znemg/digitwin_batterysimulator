@@ -115,6 +115,7 @@ class NetworkNodeRow(Base):
     power_radio     = Column(Integer, nullable=False)
     power_processor = Column(Integer, nullable=False)
     power_mic       = Column(Integer, nullable=False)
+    battery_timeseries = Column(JSON, nullable=True)   # {time_series, battery_energy_series, battery_percent_series, alive_series, death_time}
 
     run = relationship("RunRow", back_populates="nodes")
 

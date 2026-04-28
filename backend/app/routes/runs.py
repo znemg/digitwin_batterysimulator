@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 import re
 from app.models import Run, RunDetail
 from app.database import get_db
+from app.simulator import run_from_dict
 from app.db_models import (
     RunRow, RunMetricsRow, NetworkNodeRow, NetworkEdgeRow, 
     RerouteEventRow, DetectionByTypeRow, LatencyByRankRow, 
@@ -58,6 +59,158 @@ def _generate_mock_node_data(node_role: str) -> Dict[str, Any]:
         "power_radio": random.randint(100, 500),
         "power_processor": random.randint(50, 300),
         "power_mic": random.randint(10, 100),
+    }
+
+
+def _cvp_to_watts(cvp: Dict[str, Any]) -> Optional[float]:
+    """Convert a CVP dict {current mA, voltage V, power W} to watts.
+    Returns None if no usable values are present."""
+    if cvp is None:
+        return None
+    p = cvp.get("power")
+    if p is not None:
+        return float(p)
+    c, v = cvp.get("current"), cvp.get("voltage")
+    if c is not None and v is not None:
+        return float(c) / 1000.0 * float(v)
+    return None
+
+
+_SHAMAN_I_DEFAULTS = {
+    "proc_slp": 0.001, "proc_wrk": 0.05,
+    "radio_tx": 0.3,   "radio_rx": 0.15,
+    "cam_img":  0.2,   "cam_slp": 0.001,
+    "mic_listen": 0.01, "mic_slp": 0.001,
+    "t_proc": 0.01, "t_radio_tx": 0.02,
+    "t_radio_rx": 0.01, "t_cam_img": 0.05,
+}
+
+_SHAMAN_II_DEFAULTS = {
+    "proc_act": 0.5,  "proc_slp": 0.05,
+    "ctrl_act": 0.3,  "ctrl_slp": 0.03,
+    "radio_tx": 0.4,  "radio_rx": 0.2,
+    "backoff":  0.1,
+    "t_proc": 0.01, "t_radio_tx": 0.02,
+    "t_radio_rx": 0.01, "t_backoff": 0.05,
+    "f_hop": 1.0,
+}
+
+# Maps frontend component names → simulator field names
+_I_COMPONENT_MAP = {
+    "sleep":       "proc_slp",
+    "working":     "proc_wrk",
+    "transmit":    "radio_tx",
+    "receive":     "radio_rx",
+    "cameraImage": "cam_img",
+    "cameraSleep": "cam_slp",
+    "micListen":   "mic_listen",
+    "micSleep":    "mic_slp",
+}
+
+_II_COMPONENT_MAP = {
+    "sleep":    "proc_slp",
+    "working":  "proc_act",
+    "transmit": "radio_tx",
+    "receive":  "radio_rx",
+}
+
+
+def _build_simulator_payload(
+    nodes: List[Dict[str, Any]],
+    edges: List[Dict[str, Any]],
+    shaman_i_cfg: Optional[Dict[str, Any]],
+    shaman_ii_cfg: Optional[Dict[str, Any]],
+    duration_hours: float = 24.0,
+) -> Dict[str, Any]:
+    """Translate frontend create-run payload into simulator input format."""
+
+    # Parse power values from frontend config objects
+    i_power: Dict[str, float] = dict(_SHAMAN_I_DEFAULTS)
+    if shaman_i_cfg:
+        components = shaman_i_cfg.get("components", {})
+        for frontend_key, sim_key in _I_COMPONENT_MAP.items():
+            w = _cvp_to_watts(components.get(frontend_key))
+            if w is not None:
+                i_power[sim_key] = w
+
+    ii_power: Dict[str, float] = dict(_SHAMAN_II_DEFAULTS)
+    if shaman_ii_cfg:
+        components = shaman_ii_cfg.get("components", {})
+        for frontend_key, sim_key in _II_COMPONENT_MAP.items():
+            w = _cvp_to_watts(components.get(frontend_key))
+            if w is not None:
+                ii_power[sim_key] = w
+
+    # Battery capacities from config (Wh)
+    i_battery = float(shaman_i_cfg.get("batteryLife") or 5.0) if shaman_i_cfg else 5.0
+    ii_battery = float(shaman_ii_cfg.get("batteryLife") or 10.0) if shaman_ii_cfg else 10.0
+
+    # Build parent/child maps from edges
+    children_of: Dict[str, List[str]] = {n["id"]: [] for n in nodes}
+    parent_of: Dict[str, Optional[str]] = {n["id"]: None for n in nodes}
+    role_of = {n["id"]: n["role"] for n in nodes}
+
+    for edge in edges:
+        frm, to = edge["from"], edge["to"]
+        r_frm, r_to = role_of.get(frm), role_of.get(to)
+        # Determine direction: data flows sensor→relay→command
+        if (r_frm == "sensor" and r_to == "relay") or \
+           (r_frm == "relay"  and r_to == "command") or \
+           (r_frm == "relay"  and r_to == "relay"):
+            parent_of[frm] = to
+            if frm not in children_of.get(to, []):
+                children_of.setdefault(to, []).append(frm)
+        elif (r_frm == "relay" and r_to == "sensor") or \
+             (r_frm == "command" and r_to == "relay"):
+            parent_of[to] = frm
+            if to not in children_of.get(frm, []):
+                children_of.setdefault(frm, []).append(to)
+
+    # Compute rank (hops to command center)
+    def _rank(nid: str, visited: set) -> int:
+        if nid in visited:
+            return 0
+        visited.add(nid)
+        p = parent_of.get(nid)
+        if p is None or role_of.get(nid) == "command":
+            return 0
+        return 1 + _rank(p, visited)
+
+    sim_nodes = []
+    for node in nodes:
+        nid = node["id"]
+        role = node["role"]
+
+        if role == "command":
+            node_type = "Command Center"
+            pc = None
+            cap = 9999.0
+        elif role == "relay":
+            node_type = "Shaman II"
+            pc = dict(ii_power)
+            cap = ii_battery
+        else:
+            node_type = "Shaman I"
+            pc = dict(i_power)
+            cap = i_battery
+
+        sim_nodes.append({
+            "node_id":             nid,
+            "node_type":           node_type,
+            "x":                   node.get("x", 0.0),
+            "y":                   node.get("y", 0.0),
+            "parent_id":           parent_of.get(nid),
+            "child_ids":           children_of.get(nid, []),
+            "rank":                _rank(nid, set()),
+            "battery_capacity_wh": cap,
+            "power_config":        pc,
+        })
+
+    return {
+        "nodes":      sim_nodes,
+        "events":     [],                          # no events at run-creation time
+        "total_time": duration_hours * 3600.0,
+        "time_step":  3600.0,                      # 1-hour resolution
     }
 
 
@@ -236,24 +389,73 @@ def create_run(req: CreateRunRequest, db: Session = Depends(get_db)):
         if node.get("id") and node.get("role")
     }
 
+    # Run energy simulation
+    try:
+        duration_hours = float(duration.replace("h", "")) if duration.endswith("h") else 24.0
+        sim_payload = _build_simulator_payload(
+            nodes=req.nodes,
+            edges=req.edges,
+            shaman_i_cfg=req.shamanIConfig,
+            shaman_ii_cfg=req.shamanIIConfig,
+            duration_hours=duration_hours,
+        )
+        sim_result = run_from_dict(sim_payload)
+        sim_nodes_out = sim_result.get("nodes", {})
+    except Exception:
+        sim_nodes_out = {}
+
     parent_by_sensor: Dict[str, str] = {}
     node_child_pairs = set()
-    
-    # Create network nodes with mock data
+
+    # Create network nodes — use simulator output where available, fall back to mock
     for node in req.nodes:
-        mock_data = _generate_mock_node_data(node["role"])
+        nid = node["id"]
+        sim = sim_nodes_out.get(nid)
         real_x = node.get("realX")
         real_y = node.get("realY")
+
+        if sim and sim.get("battery_percent_series"):
+            final_pct = sim["battery_percent_series"][-1]
+            battery = max(0, min(100, round(final_pct)))
+            steps = len(sim["battery_energy_series"])
+            drain = round((sim["battery_energy_series"][0] - sim["battery_energy_series"][-1]) / max(steps, 1), 4)
+            health = "good" if battery > 50 else "warning" if battery > 20 else "critical"
+            timeseries_data = {
+                "time_series":             sim["time_series"],
+                "battery_energy_series":   sim["battery_energy_series"],
+                "battery_percent_series":  sim["battery_percent_series"],
+                "alive_series":            sim["alive_series"],
+                "death_time":              sim["death_time"],
+            }
+            node_data = {
+                "battery":    battery,
+                "drain":      drain,
+                "traffic":    random.randint(10, 95),
+                "health":     health,
+                "packets_in":  random.randint(100, 5000),
+                "packets_out": random.randint(100, 5000),
+                "retries":    sim.get("total_retries", 0),
+                "collisions":  random.randint(0, 10),
+                "ai_det":     random.randint(0, 20),
+                "power_radio":     random.randint(100, 500),
+                "power_processor": random.randint(50, 300),
+                "power_mic":       random.randint(10, 100),
+            }
+        else:
+            timeseries_data = None
+            node_data = _generate_mock_node_data(node["role"])
+
         db_node = NetworkNodeRow(
             run_id=run.id,
-            node_id=node["id"],
+            node_id=nid,
             label=node["label"],
             role=node["role"],
             pos_x=node.get("x", 0.5),
             pos_y=node.get("y", 0.5),
             lat=node.get("lat", real_x),
             lon=node.get("lon", real_y),
-            **mock_data,
+            battery_timeseries=timeseries_data,
+            **node_data,
         )
         db.add(db_node)
 

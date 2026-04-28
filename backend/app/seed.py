@@ -269,5 +269,334 @@ def seed():
         db.close()
 
 
+# ---------------------------------------------------------------------------
+# Physics-based seed data — computed by simulator.py
+# ---------------------------------------------------------------------------
+
+# Shared power configs (W) for all simulated runs
+_SIM_II_CFG = dict(
+    proc_act=0.50, proc_slp=0.04, ctrl_act=0.30, ctrl_slp=0.02,
+    radio_tx=0.42, radio_rx=0.22, backoff=0.10,
+    t_proc=0.012, t_radio_tx=0.025, t_radio_rx=0.012, t_backoff=0.05, f_hop=1.0,
+)
+_SIM_I_CFG = dict(
+    proc_slp=0.001, proc_wrk=0.050, radio_tx=0.300, radio_rx=0.150,
+    cam_img=0.200, cam_slp=0.001, mic_listen=0.012, mic_slp=0.001,
+    t_proc=0.010, t_radio_tx=0.020, t_radio_rx=0.010, t_cam_img=0.050,
+)
+
+# Same topology for all simulated runs (mirrors RAW_NODES structure)
+_SIM_TOPOLOGY = [
+    dict(node_id="CMD", node_type="Command Center", x=0.50, y=0.10, parent_id=None,  child_ids=["R1","R2","R3"],          rank=0, battery_capacity_wh=9999,   power_config=None),
+    dict(node_id="R1",  node_type="Shaman II",      x=0.28, y=0.30, parent_id="CMD", child_ids=["S1","S2","S3","S4","R4"],rank=1, battery_capacity_wh=10.0,   power_config=_SIM_II_CFG),
+    dict(node_id="R2",  node_type="Shaman II",      x=0.72, y=0.28, parent_id="CMD", child_ids=["S5","S6","S7"],          rank=1, battery_capacity_wh=10.0,   power_config=_SIM_II_CFG),
+    dict(node_id="R3",  node_type="Shaman II",      x=0.50, y=0.48, parent_id="CMD", child_ids=["S8","S9","S10"],         rank=1, battery_capacity_wh=10.0,   power_config=_SIM_II_CFG),
+    dict(node_id="R4",  node_type="Shaman II",      x=0.16, y=0.55, parent_id="R1",  child_ids=["S11"],                   rank=2, battery_capacity_wh=10.0,   power_config=_SIM_II_CFG),
+    dict(node_id="S1",  node_type="Shaman I",       x=0.10, y=0.36, parent_id="R1",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S2",  node_type="Shaman I",       x=0.14, y=0.20, parent_id="R1",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S3",  node_type="Shaman I",       x=0.08, y=0.50, parent_id="R1",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S4",  node_type="Shaman I",       x=0.22, y=0.42, parent_id="R1",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S5",  node_type="Shaman I",       x=0.86, y=0.17, parent_id="R2",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S6",  node_type="Shaman I",       x=0.88, y=0.38, parent_id="R2",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S7",  node_type="Shaman I",       x=0.78, y=0.44, parent_id="R2",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S8",  node_type="Shaman I",       x=0.38, y=0.65, parent_id="R3",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S9",  node_type="Shaman I",       x=0.56, y=0.66, parent_id="R3",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S10", node_type="Shaman I",       x=0.62, y=0.56, parent_id="R3",  child_ids=[],                        rank=2, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+    dict(node_id="S11", node_type="Shaman I",       x=0.24, y=0.70, parent_id="R4",  child_ids=[],                        rank=3, battery_capacity_wh=5.0,    power_config=_SIM_I_CFG),
+]
+
+# Node label / role mapping for DB (mirrors RAW_NODES)
+_SIM_NODE_META = {
+    "CMD": dict(label="Command Center",  role="command", parent_node_id=None,  children=[], events=["System boot","All nodes online","12 reroutes"]),
+    "R1":  dict(label="Shaman II-1",     role="relay",   parent_node_id=None,  children=["S1","S2","S3","S4"], events=["High relay load","Battery warning"]),
+    "R2":  dict(label="Shaman II-2",     role="relay",   parent_node_id=None,  children=["S5","S6","S7"],      events=["Relay congestion","Packet loss spike"]),
+    "R3":  dict(label="Shaman II-3",     role="relay",   parent_node_id=None,  children=["S8","S9","S10"],     events=["Normal operation"]),
+    "R4":  dict(label="Shaman II-4",     role="relay",   parent_node_id="R1",  children=["S11"],               events=["Moderate load"]),
+    "S1":  dict(label="Shaman I-01",     role="sensor",  parent_node_id="R1",  children=[], events=["8 gunshot","6 bird"]),
+    "S2":  dict(label="Shaman I-02",     role="sensor",  parent_node_id="R1",  children=[], events=["12 bird","6 chainsaw"]),
+    "S3":  dict(label="Shaman I-03",     role="sensor",  parent_node_id="R1",  children=[], events=["High retries","9 bird"]),
+    "S4":  dict(label="Shaman I-04",     role="sensor",  parent_node_id="R1",  children=[], events=["Normal","7 bird"]),
+    "S5":  dict(label="Shaman I-05",     role="sensor",  parent_node_id="R2",  children=[], events=["10 bird","5 gunshot"]),
+    "S6":  dict(label="Shaman I-06",     role="sensor",  parent_node_id="R2",  children=[], events=["8 bird","5 voice"]),
+    "S7":  dict(label="Shaman I-07",     role="sensor",  parent_node_id="R2",  children=[], events=["Moderate retries","8 bird"]),
+    "S8":  dict(label="Shaman I-08",     role="sensor",  parent_node_id="R3",  children=[], events=["Low traffic","5 bird"]),
+    "S9":  dict(label="Shaman I-09",     role="sensor",  parent_node_id="R3",  children=[], events=["Normal","6 bird"]),
+    "S10": dict(label="Shaman I-10",     role="sensor",  parent_node_id="R3",  children=[], events=["Low load","4 bird"]),
+    "S11": dict(label="Shaman I-11",     role="sensor",  parent_node_id="R4",  children=[], events=["High detection"]),
+}
+
+# Per-scenario event profiles: (node_id, hour_offset, triggers_camera)
+# More events → more drain → lower final battery
+_SCENARIO_EVENTS = {
+    "pass": [
+        ("S1", 2.0, False), ("S1", 5.0, False), ("S1", 9.0, False),
+        ("S1",14.0, False), ("S1",18.0, False), ("S1",22.0, False),
+        ("S2", 1.0, False), ("S2", 3.5, False), ("S2", 6.0, False),
+        ("S2",10.0, False), ("S2",14.0, False), ("S2",17.5, False),
+        ("S2",21.0, False),
+        ("S3", 3.0, True),  ("S3", 8.0, True),  ("S3",13.0, True),
+        ("S3",18.0, True),  ("S3",22.0, True),
+        ("S4", 4.0, False), ("S4", 9.0, False), ("S4",15.0, False),
+        ("S4",20.0, False),
+        ("S5", 2.5, False), ("S5", 5.5, False), ("S5", 9.0, False),
+        ("S5",12.0, False), ("S5",16.0, False), ("S5",20.0, False),
+        ("S6", 3.0, False), ("S6", 7.0, False), ("S6",11.0, False),
+        ("S6",15.5, False), ("S6",19.0, False),
+        ("S7", 4.0, False), ("S7", 9.5, False), ("S7",15.0, False),
+        ("S7",20.5, False),
+        ("S8", 5.0, False), ("S8",11.0, False), ("S8",18.0, False),
+        ("S9", 6.0, False), ("S9",13.0, False), ("S9",20.0, False),
+        ("S10",7.0, False), ("S10",15.0, False),
+        ("S11",1.5, True),  ("S11",3.0, True),  ("S11",4.5, False),
+        ("S11",6.0, True),  ("S11",8.0, False), ("S11",10.0,True),
+        ("S11",12.0,False), ("S11",14.0,True),  ("S11",16.0,False),
+        ("S11",18.0,True),  ("S11",20.0,False), ("S11",22.0,True),
+    ],
+    "warning": [   # more activity → more drain
+        ("S1", 1.5, False), ("S1", 3.0, False), ("S1", 5.0, True),
+        ("S1", 7.5, False), ("S1",10.0, True),  ("S1",13.0, False),
+        ("S1",16.0, True),  ("S1",19.0, False), ("S1",22.0, True),
+        ("S2", 1.0, False), ("S2", 2.5, True),  ("S2", 4.5, False),
+        ("S2", 6.5, True),  ("S2", 9.0, False), ("S2",12.0, True),
+        ("S2",15.0, False), ("S2",18.0, True),  ("S2",21.0, False),
+        ("S3", 2.0, True),  ("S3", 4.0, True),  ("S3", 6.0, True),
+        ("S3", 8.5, True),  ("S3",11.0, True),  ("S3",13.5, True),
+        ("S3",16.0, True),  ("S3",19.0, True),  ("S3",22.0, True),
+        ("S4", 2.0, False), ("S4", 5.0, True),  ("S4", 9.0, False),
+        ("S4",13.0, True),  ("S4",17.0, False), ("S4",21.0, True),
+        ("S5", 1.5, False), ("S5", 3.5, True),  ("S5", 6.0, False),
+        ("S5", 8.5, True),  ("S5",11.5, False), ("S5",14.0, True),
+        ("S5",17.0, False), ("S5",20.0, True),  ("S5",23.0, False),
+        ("S6", 2.0, False), ("S6", 4.5, True),  ("S6", 7.5, False),
+        ("S6",10.5, True),  ("S6",13.5, False), ("S6",16.5, True),
+        ("S6",19.5, False), ("S6",22.5, True),
+        ("S7", 2.5, True),  ("S7", 5.5, True),  ("S7", 9.0, True),
+        ("S7",12.5, True),  ("S7",16.0, True),  ("S7",20.0, True),
+        ("S8", 3.0, False), ("S8", 7.0, True),  ("S8",12.0, False),
+        ("S8",17.0, True),  ("S8",22.0, False),
+        ("S9", 3.5, False), ("S9", 8.0, True),  ("S9",13.0, False),
+        ("S9",18.0, True),  ("S9",22.5, False),
+        ("S10",4.0, False), ("S10",9.0, True),  ("S10",14.0, False),
+        ("S10",19.0,True),  ("S10",23.0,False),
+        ("S11",0.5, True),  ("S11",1.5, True),  ("S11",2.5, True),
+        ("S11",3.5, True),  ("S11",4.5, True),  ("S11",5.5, True),
+        ("S11",6.5, True),  ("S11",7.5, True),  ("S11",8.5, True),
+        ("S11",9.5, True),  ("S11",10.5,True),  ("S11",11.5,True),
+        ("S11",12.5,True),  ("S11",13.5,True),  ("S11",14.5,True),
+        ("S11",15.5,True),  ("S11",16.5,True),  ("S11",17.5,True),
+        ("S11",18.5,True),  ("S11",19.5,True),
+    ],
+    "fail": [      # maximum activity → maximum drain, some nodes die
+        ("S1", 0.5, True),  ("S1", 1.0, True),  ("S1", 1.5, True),
+        ("S1", 2.0, True),  ("S1", 2.5, True),  ("S1", 3.0, True),
+        ("S1", 3.5, True),  ("S1", 4.0, True),  ("S1", 4.5, True),
+        ("S1", 5.0, True),  ("S1", 5.5, True),  ("S1", 6.0, True),
+        ("S2", 0.5, True),  ("S2", 1.0, True),  ("S2", 1.5, True),
+        ("S2", 2.0, True),  ("S2", 2.5, True),  ("S2", 3.0, True),
+        ("S2", 3.5, True),  ("S2", 4.0, True),  ("S2", 4.5, True),
+        ("S2", 5.0, True),  ("S2", 5.5, True),  ("S2", 6.0, True),
+        ("S3", 0.5, True),  ("S3", 1.0, True),  ("S3", 1.5, True),
+        ("S3", 2.0, True),  ("S3", 2.5, True),  ("S3", 3.0, True),
+        ("S3", 3.5, True),  ("S3", 4.0, True),  ("S3", 4.5, True),
+        ("S3", 5.0, True),  ("S3", 5.5, True),  ("S3", 6.0, True),
+        ("S4", 0.5, True),  ("S4", 1.0, True),  ("S4", 1.5, True),
+        ("S4", 2.0, True),  ("S4", 2.5, True),  ("S4", 3.0, True),
+        ("S4", 3.5, True),  ("S4", 4.0, True),  ("S4", 4.5, True),
+        ("S4", 5.0, True),  ("S4", 5.5, True),  ("S4", 6.0, True),
+        ("S5", 0.5, True),  ("S5", 1.5, True),  ("S5", 2.5, True),
+        ("S5", 3.5, True),  ("S5", 4.5, True),  ("S5", 5.5, True),
+        ("S5", 6.5, True),  ("S5", 7.5, True),  ("S5", 8.5, True),
+        ("S5", 9.5, True),  ("S5",10.5, True),  ("S5",11.5, True),
+        ("S6", 0.5, True),  ("S6", 1.5, True),  ("S6", 2.5, True),
+        ("S6", 3.5, True),  ("S6", 4.5, True),  ("S6", 5.5, True),
+        ("S6", 6.5, True),  ("S6", 7.5, True),  ("S6", 8.5, True),
+        ("S6", 9.5, True),  ("S6",10.5, True),  ("S6",11.5, True),
+        ("S7", 1.0, True),  ("S7", 2.5, True),  ("S7", 4.0, True),
+        ("S7", 5.5, True),  ("S7", 7.0, True),  ("S7", 8.5, True),
+        ("S7",10.0, True),  ("S7",11.5, True),  ("S7",13.0, True),
+        ("S7",14.5, True),  ("S7",16.0, True),  ("S7",17.5, True),
+        ("S8", 1.0, True),  ("S8", 3.0, True),  ("S8", 5.0, True),
+        ("S8", 7.0, True),  ("S8", 9.0, True),  ("S8",11.0, True),
+        ("S9", 1.5, True),  ("S9", 4.0, True),  ("S9", 6.5, True),
+        ("S9", 9.0, True),  ("S9",11.5, True),
+        ("S10",2.0, True),  ("S10",5.0, True),  ("S10",8.0, True),
+        ("S10",11.0,True),
+        ("S11",0.5, True),  ("S11",1.0, True),  ("S11",1.5, True),
+        ("S11",2.0, True),  ("S11",2.5, True),  ("S11",3.0, True),
+        ("S11",3.5, True),  ("S11",4.0, True),  ("S11",4.5, True),
+        ("S11",5.0, True),  ("S11",5.5, True),  ("S11",6.0, True),
+        ("S11",6.5, True),  ("S11",7.0, True),  ("S11",7.5, True),
+        ("S11",8.0, True),  ("S11",8.5, True),  ("S11",9.0, True),
+        ("S11",9.5, True),  ("S11",10.0,True),  ("S11",10.5,True),
+        ("S11",11.0,True),  ("S11",11.5,True),  ("S11",12.0,True),
+    ],
+}
+
+SIM_RUNS = [
+    dict(id=11, name="Sim_Forest_Night_01",   date="2025-03-10", scenario="Tropical Night", shamani="Radxa Zero", shamanii="Radxa Zero", duration="24h", status="pass"),
+    dict(id=12, name="Sim_Forest_Dawn_03",    date="2025-03-09", scenario="Dawn Chorus",    shamani="ESP32",      shamanii="Radxa Zero", duration="24h", status="warning"),
+    dict(id=13, name="Sim_Wetland_Rain_02",   date="2025-03-08", scenario="Wetland Rain",   shamani="ESP32",      shamanii="Radxa Zero", duration="24h", status="fail"),
+]
+
+SIM_EDGES = RAW_EDGES  # same topology
+
+
+def _build_sim_events(scenario_status: str, duration_h: float) -> list:
+    raw = _SCENARIO_EVENTS[scenario_status]
+    return [
+        {"node_id": nid, "time": h * 3600.0, "triggers_camera": cam}
+        for nid, h, cam in raw
+        if h < duration_h
+    ]
+
+
+def _run_physics_sim(status: str, duration_h: float) -> dict:
+    """Run the energy simulator and return per-node output dict."""
+    from app.simulator import run_from_dict
+    n_retry = {"pass": 2, "warning": 4, "fail": 8}[status]
+    payload = {
+        "nodes":      _SIM_TOPOLOGY,
+        "events":     _build_sim_events(status, duration_h),
+        "total_time": duration_h * 3600.0,
+        "time_step":  3600.0,
+        "n_retry_default": n_retry,
+    }
+    return run_from_dict(payload)["nodes"]
+
+
+def _health_from_pct(pct: float) -> str:
+    if pct > 50: return "good"
+    if pct > 20: return "warning"
+    return "critical"
+
+
+def _sim_metrics(sim_nodes: dict, status: str) -> dict:
+    """Derive run-level metrics from simulator output."""
+    batteries = [
+        nd["battery_percent_series"][-1]
+        for nd in sim_nodes.values()
+        if nd["battery_percent_series"] and nd["node_type"] != "Command Center"
+    ]
+    avg_battery = round(sum(batteries) / len(batteries), 2) if batteries else 100.0
+    total_retries = sum(nd["total_retries"] for nd in sim_nodes.values())
+    congestion = min(99, round(total_retries / max(len(sim_nodes), 1) * 2))
+    base = _metrics_for_status(status)
+    base["battery_health"] = avg_battery
+    base["congestion"] = congestion
+    return base
+
+
+def seed_simulated():
+    """Seed physics-based runs (IDs 11–13). Safe to call alongside seed()."""
+    from app.simulator import run_from_dict  # noqa: F401 — ensure importable
+    init_db()
+    db = SessionLocal()
+    try:
+        existing_ids = {r.id for r in db.query(RunRow.id).all()}
+
+        for r in SIM_RUNS:
+            if r["id"] in existing_ids:
+                continue
+
+            duration_h = float(r["duration"].replace("h", ""))
+            sim_nodes = _run_physics_sim(r["status"], duration_h)
+
+            run_date = Date.fromisoformat(r["date"])
+            run = RunRow(
+                id=r["id"], name=r["name"], date=run_date,
+                scenario=r["scenario"], shamani=r["shamani"],
+                shamanii=r["shamanii"], duration=r["duration"], status=r["status"],
+            )
+            db.add(run)
+            db.flush()
+
+            # Metrics derived from simulation
+            m = _sim_metrics(sim_nodes, r["status"])
+            db.add(RunMetricsRow(run_id=run.id, **m))
+
+            for det in _detection_counts_for_status(r["status"]):
+                db.add(DetectionByTypeRow(run_id=run.id, **det))
+            for lr in _latency_by_rank_for_status(r["status"]):
+                db.add(LatencyByRankRow(run_id=run.id, **lr))
+            for pt in _acc_curve(r["status"]):
+                db.add(AccuracyConfidenceCurveRow(run_id=run.id, **pt))
+
+            # Nodes — values from simulator
+            for topo_node in _SIM_TOPOLOGY:
+                nid = topo_node["node_id"]
+                sim = sim_nodes.get(nid, {})
+                meta = _SIM_NODE_META[nid]
+
+                pct_series = sim.get("battery_percent_series", [])
+                energy_series = sim.get("battery_energy_series", [])
+                final_pct = pct_series[-1] if pct_series else 100.0
+                steps = len(energy_series)
+                drain = round(
+                    (energy_series[0] - energy_series[-1]) / max(steps, 1), 6
+                ) if steps > 1 else 0.0
+
+                timeseries = {
+                    "time_series":            sim.get("time_series", []),
+                    "battery_energy_series":  energy_series,
+                    "battery_percent_series": pct_series,
+                    "alive_series":           sim.get("alive_series", []),
+                    "death_time":             sim.get("death_time"),
+                } if pct_series else None
+
+                # traffic ~ forwarded messages; retries from simulator
+                total_fwd     = sim.get("total_forwarded", 0)
+                total_retries = sim.get("total_retries", 0)
+                traffic = min(99, round(total_fwd * 2 + total_retries))
+
+                # power breakdown (mW integers): derive from config watts
+                pc = topo_node["power_config"] or {}
+                power_radio     = round((pc.get("radio_tx", 0) + pc.get("radio_rx", 0)) * 500)
+                power_processor = round(pc.get("proc_wrk", pc.get("proc_act", 0)) * 500)
+                power_mic       = round(pc.get("mic_listen", 0) * 500)
+
+                db_node = NetworkNodeRow(
+                    run_id=run.id,
+                    node_id=nid,
+                    label=meta["label"],
+                    role=meta["role"],
+                    pos_x=topo_node["x"],
+                    pos_y=topo_node["y"],
+                    battery=max(0, min(100, round(final_pct))),
+                    drain=round(drain * 1000, 4),   # convert Wh/step → mWh for display
+                    traffic=max(0, traffic),
+                    health=_health_from_pct(final_pct),
+                    packets_in=total_fwd,
+                    packets_out=total_fwd,
+                    retries=total_retries,
+                    collisions=max(0, round(total_retries * 0.2)),
+                    ai_det=len([e for e in _build_sim_events(r["status"], duration_h) if e["node_id"] == nid]),
+                    parent_node_id=meta["parent_node_id"],
+                    power_radio=max(1, power_radio),
+                    power_processor=max(1, power_processor),
+                    power_mic=max(0, power_mic),
+                    battery_timeseries=timeseries,
+                )
+                db.add(db_node)
+
+                for ev in meta["events"]:
+                    db.add(NodeEventRow(run_id=run.id, node_id=nid, event_text=ev))
+                for child in meta["children"]:
+                    db.add(NodeChildRow(run_id=run.id, parent_node_id=nid, child_node_id=child))
+
+            for e in SIM_EDGES:
+                db.add(NetworkEdgeRow(run_id=run.id, **e))
+            for rr in RAW_REROUTES:
+                db.add(RerouteEventRow(run_id=run.id, **rr))
+
+        db.commit()
+        print(f"Seeded {len(SIM_RUNS)} physics-based runs (IDs 11–13).")
+    except Exception as exc:
+        db.rollback()
+        raise exc
+    finally:
+        db.close()
+
+
 if __name__ == "__main__":
     seed()
+    seed_simulated()
